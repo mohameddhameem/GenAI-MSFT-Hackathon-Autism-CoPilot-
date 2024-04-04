@@ -242,11 +242,11 @@ PROMPTFLOW_RESPONSE_TIMEOUT = os.environ.get("PROMPTFLOW_RESPONSE_TIMEOUT", 30.0
 PROMPTFLOW_BALANCER_ENDPOINT = os.environ.get("PROMPTFLOW_BALANCER_ENDPOINT")
 PROMPTFLOW_BALANCER_KEY = os.environ.get("PROMPTFLOW_BALANCER_KEY")
 PROMPTFLOW_CATEGORY_ENDPOINT = os.environ.get("PROMPTFLOW_CATEGORY_ENDPOINT")
-PROMPTFLOW_CATEGORY_KEY = os.environ.get("PROMPTFLOW_CATEGORY_ENDPOINT")
+PROMPTFLOW_CATEGORY_KEY = os.environ.get("PROMPTFLOW_CATEGORY_KEY")
 PROMPTFLOW_EXTRACTION_ENDPOINT = os.environ.get("PROMPTFLOW_EXTRACTION_ENDPOINT")
-PROMPTFLOW_EXTRACTION_KEY = os.environ.get("PROMPTFLOW_EXTRACTION_ENDPOINT")
+PROMPTFLOW_EXTRACTION_KEY = os.environ.get("PROMPTFLOW_EXTRACTION_KEY")
 PROMPTFLOW_SUMMARY_ENDPOINT = os.environ.get("PROMPTFLOW_SUMMARY_ENDPOINT")
-PROMPTFLOW_SUMMARY_KEY = os.environ.get("PROMPTFLOW_SUMMARY_ENDPOINT")
+PROMPTFLOW_SUMMARY_KEY = os.environ.get("PROMPTFLOW_SUMMARY_KEY")
 
 PROMPTFLOW_DICT = {
     "balancer": {
@@ -927,7 +927,7 @@ async def call_prompt_flow(pf_endpoint, pf_key, request_json: dict):
         headers=headers,
         json=request_json
     )
-    print(response.json())
+    print(response)
     return response.json()
 
 @bp.route("/conversation", methods=["POST"])
