@@ -814,11 +814,13 @@ def prepare_model_args(request_body):
     return model_args
 
 
-async def promptflow_request(request):
+async def promptflow_request(request, pf_endpoint=None, pf_key=None):
+    promptflow_url = pf_endpoint or PROMPTFLOW_ENDPOINT
+    promptflow_key = pf_key or PROMPTFLOW_API_KEY
     try:
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {PROMPTFLOW_API_KEY}",
+            "Authorization": f"Bearer {promptflow_key}",
         }
         # Adding timeout for scenarios where response takes longer to come back
         logging.debug(f"Setting timeout to {PROMPTFLOW_RESPONSE_TIMEOUT}")
@@ -831,7 +833,7 @@ async def promptflow_request(request):
             # NOTE: This only support question and chat_history parameters
             # If you need to add more parameters, you need to modify the request body
             response = await client.post(
-                PROMPTFLOW_ENDPOINT,
+                promptflow_url,
                 json={
                     f"{PROMPTFLOW_REQUEST_FIELD_NAME}": pf_formatted_obj[-1]["inputs"][
                         PROMPTFLOW_REQUEST_FIELD_NAME
@@ -861,9 +863,11 @@ async def send_chat_request(request):
     return response
 
 
-async def complete_chat_request(request_body):
+async def complete_chat_request(request_body, pf_endpoint=None, pf_key=None):
     if USE_PROMPTFLOW and PROMPTFLOW_ENDPOINT and PROMPTFLOW_API_KEY:
-        response = await promptflow_request(request_body)
+        promptflow_url = pf_endpoint or PROMPTFLOW_ENDPOINT
+        promptflow_key = pf_key or PROMPTFLOW_API_KEY
+        response = await promptflow_request(request_body, promptflow_url, promptflow_key)
         history_metadata = request_body.get("history_metadata", {})
         return format_pf_non_streaming_response(
             response, history_metadata, PROMPTFLOW_RESPONSE_FIELD_NAME
@@ -885,7 +889,7 @@ async def stream_chat_request(request_body):
     return generate()
 
 
-async def conversation_internal(request_body):
+async def conversation_internal(request_body, pf_endpoint=None, pf_key=None):
     try:
         if SHOULD_STREAM:
             result = await stream_chat_request(request_body)
@@ -894,7 +898,7 @@ async def conversation_internal(request_body):
             response.mimetype = "application/json-lines"
             return response
         else:
-            result = await complete_chat_request(request_body)
+            result = await complete_chat_request(request_body, pf_endpoint, pf_key)
             return jsonify(result)
 
     except Exception as ex:
@@ -916,6 +920,8 @@ async def conversation():
 """
 
 async def call_prompt_flow(pf_endpoint, pf_key, request_json: dict):
+    request_json['question'] = request_json["messages"][-1]["content"]
+    logging.debug(f"call_prompt_flow: request_json: {request_json}") 
     headers = {
     'Content-Type':'application/json',
     'Authorization': ('Bearer '+ pf_key)
@@ -926,10 +932,12 @@ async def call_prompt_flow(pf_endpoint, pf_key, request_json: dict):
         headers=headers,
         json=request_json
     )
+    logging.debug("call_prompt_flow: ", response)
     return response.json()
 
 @bp.route("/conversation", methods=["POST"])
 async def conversation():
+    logging.debug(f"conversation!!!!")
     if not request.is_json:
         return jsonify({"error": "request must be json"}), 415
 
@@ -942,15 +950,24 @@ async def conversation():
         )
     template = template["task"]
     logging.debug(f"Output of Promptflow balancer: {template}")
-    request_json["chat_history"] = []
+    # request_json["chat_history"] = []
     # Make call to the chosen prompt
-    answer = await call_prompt_flow(
-        pf_endpoint=PROMPTFLOW_DICT[template]["endpoint"],
-        pf_key=PROMPTFLOW_DICT[template]["key"],
-        request_json=request_json
-    )
+    # answer = await call_prompt_flow(
+    #     pf_endpoint=PROMPTFLOW_DICT[template]["endpoint"],
+    #     pf_key=PROMPTFLOW_DICT[template]["key"],
+    #     request_json=request_json
+    # )
+    
+    result = await conversation_internal(
+        request_json, 
+        pf_endpoint=PROMPTFLOW_DICT[template]["endpoint"], 
+        pf_key=PROMPTFLOW_DICT[template]["key"])
+    
+    logging.debug(f"Output of Promptflow balancer: {template} TESTING!!!!")
+    
+    return result
     # Return outcome
-    return answer
+    # return answer
 
 @bp.route("/frontend_settings", methods=["GET"])
 def get_frontend_settings():
@@ -964,6 +981,7 @@ def get_frontend_settings():
 ## Conversation History API ##
 @bp.route("/history/generate", methods=["POST"])
 async def add_conversation():
+    logging.debug("WHY HERE : /history/generate ")
     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
     user_id = authenticated_user["user_principal_id"]
 
@@ -1013,7 +1031,31 @@ async def add_conversation():
         request_body = await request.get_json()
         history_metadata["conversation_id"] = conversation_id
         request_body["history_metadata"] = history_metadata
-        return await conversation_internal(request_body)
+        
+        template = await call_prompt_flow(
+            pf_endpoint=PROMPTFLOW_BALANCER_ENDPOINT, 
+            pf_key=PROMPTFLOW_BALANCER_KEY,
+            request_json=request_body
+        )
+        logging.debug(f"Output of Promptflow balancer: {template}")
+        template = template["task"]
+        
+        # request_json["chat_history"] = []
+        # Make call to the chosen prompt
+        # answer = await call_prompt_flow(
+        #     pf_endpoint=PROMPTFLOW_DICT[template]["endpoint"],
+        #     pf_key=PROMPTFLOW_DICT[template]["key"],
+        #     request_json=request_json
+        # )
+        
+        logging.debug(f"USING PROMPT FLOW: {template} : {PROMPTFLOW_DICT[template]}")
+        result = await conversation_internal(
+            request_body, 
+            pf_endpoint=PROMPTFLOW_DICT[template]["endpoint"], 
+            pf_key=PROMPTFLOW_DICT[template]["key"])
+        
+        logging.debug(f"Output of Promptflow balancer: {result}")
+        return result
 
     except Exception as e:
         logging.exception("Exception in /history/generate")
