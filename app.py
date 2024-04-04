@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import logging
+import requests
 import uuid
 from dotenv import load_dotenv
 import httpx
@@ -238,6 +239,33 @@ USE_PROMPTFLOW = os.environ.get("USE_PROMPTFLOW", "false").lower() == "true"
 PROMPTFLOW_ENDPOINT = os.environ.get("PROMPTFLOW_ENDPOINT")
 PROMPTFLOW_API_KEY = os.environ.get("PROMPTFLOW_API_KEY")
 PROMPTFLOW_RESPONSE_TIMEOUT = os.environ.get("PROMPTFLOW_RESPONSE_TIMEOUT", 30.0)
+PROMPTFLOW_BALANCER_ENDPOINT = os.environ.get("PROMPTFLOW_BALANCER_ENDPOINT")
+PROMPTFLOW_BALANCER_KEY = os.environ.get("PROMPTFLOW_BALANCER_KEY")
+PROMPTFLOW_CATEGORY_ENDPOINT = os.environ.get("PROMPTFLOW_CATEGORY_ENDPOINT")
+PROMPTFLOW_CATEGORY_KEY = os.environ.get("PROMPTFLOW_CATEGORY_KEY")
+PROMPTFLOW_EXTRACTION_ENDPOINT = os.environ.get("PROMPTFLOW_EXTRACTION_ENDPOINT")
+PROMPTFLOW_EXTRACTION_KEY = os.environ.get("PROMPTFLOW_EXTRACTION_KEY")
+PROMPTFLOW_SUMMARY_ENDPOINT = os.environ.get("PROMPTFLOW_SUMMARY_ENDPOINT")
+PROMPTFLOW_SUMMARY_KEY = os.environ.get("PROMPTFLOW_SUMMARY_KEY")
+
+PROMPTFLOW_DICT = {
+    "balancer": {
+        "endpoint": PROMPTFLOW_BALANCER_ENDPOINT,
+        "key": PROMPTFLOW_BALANCER_KEY
+    },
+    "extraction": {
+        "endpoint": PROMPTFLOW_EXTRACTION_ENDPOINT,
+        "key": PROMPTFLOW_EXTRACTION_KEY
+    },
+    "categorization": {
+        "endpoint": PROMPTFLOW_CATEGORY_ENDPOINT,
+        "key": PROMPTFLOW_CATEGORY_KEY
+    },
+    "summarization": {
+        "endpoint": PROMPTFLOW_SUMMARY_ENDPOINT,
+        "key": PROMPTFLOW_SUMMARY_KEY
+    }
+}
 # default request and response field names are input -> 'query' and output -> 'reply'
 PROMPTFLOW_REQUEST_FIELD_NAME = os.environ.get("PROMPTFLOW_REQUEST_FIELD_NAME", "query")
 PROMPTFLOW_RESPONSE_FIELD_NAME = os.environ.get(
@@ -877,6 +905,7 @@ async def conversation_internal(request_body):
             return jsonify({"error": str(ex)}), 500
 
 
+"""
 @bp.route("/conversation", methods=["POST"])
 async def conversation():
     if not request.is_json:
@@ -884,7 +913,44 @@ async def conversation():
     request_json = await request.get_json()
 
     return await conversation_internal(request_json)
+"""
 
+async def call_prompt_flow(pf_endpoint, pf_key, request_json: dict):
+    headers = {
+    'Content-Type':'application/json',
+    'Authorization': ('Bearer '+ pf_key)
+    }
+
+    response = requests.post(
+        url=pf_endpoint,
+        headers=headers,
+        json=request_json
+    )
+    return response.json()
+
+@bp.route("/conversation", methods=["POST"])
+async def conversation():
+    if not request.is_json:
+        return jsonify({"error": "request must be json"}), 415
+
+    request_json = await request.get_json()
+    # Make call to the prompt balancer to obtain key to template prompt
+    template = await call_prompt_flow(
+        pf_endpoint=PROMPTFLOW_BALANCER_ENDPOINT, 
+        pf_key=PROMPTFLOW_BALANCER_KEY,
+        request_json=request_json
+        )
+    template = template["task"]
+    logging.debug(f"Output of Promptflow balancer: {template}")
+    request_json["chat_history"] = []
+    # Make call to the chosen prompt
+    answer = await call_prompt_flow(
+        pf_endpoint=PROMPTFLOW_DICT[template]["endpoint"],
+        pf_key=PROMPTFLOW_DICT[template]["key"],
+        request_json=request_json
+    )
+    # Return outcome
+    return answer
 
 @bp.route("/frontend_settings", methods=["GET"])
 def get_frontend_settings():
