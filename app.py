@@ -916,7 +916,6 @@ async def conversation():
 """
 
 async def call_prompt_flow(pf_endpoint, pf_key, request_json: dict):
-    print(request_json)
     headers = {
     'Content-Type':'application/json',
     'Authorization': ('Bearer '+ pf_key)
@@ -927,7 +926,6 @@ async def call_prompt_flow(pf_endpoint, pf_key, request_json: dict):
         headers=headers,
         json=request_json
     )
-    print(response)
     return response.json()
 
 @bp.route("/conversation", methods=["POST"])
@@ -943,6 +941,7 @@ async def conversation():
         request_json=request_json
         )
     template = template["task"]
+    logging.debug(f"Output of Promptflow balancer: {template}")
     request_json["chat_history"] = []
     # Make call to the chosen prompt
     answer = await call_prompt_flow(
