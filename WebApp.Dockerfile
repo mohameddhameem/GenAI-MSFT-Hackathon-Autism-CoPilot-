@@ -8,6 +8,7 @@ RUN npm ci
 COPY --chown=node:node ./frontend/ ./frontend  
 COPY --chown=node:node ./static/ ./static  
 WORKDIR /home/node/app/frontend
+RUN npm install react-syntax-highlighter
 RUN npm run build
   
 FROM python:3.11-alpine 
