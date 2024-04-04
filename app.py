@@ -920,7 +920,10 @@ async def conversation():
 """
 
 async def call_prompt_flow(pf_endpoint, pf_key, request_json: dict):
-    request_json['question'] = request_json["messages"][-1]["content"]
+    import datetime
+    user_only = [d for d in request_json["messages"] if d['role'] in 'user']
+    most_recent_message = max(user_only, key=lambda x: datetime.datetime.strptime(x["date"], "%Y-%m-%dT%H:%M:%S.%fZ"))
+    request_json['question'] = most_recent_message["content"]
     logging.debug(f"call_prompt_flow: request_json: {request_json}") 
     headers = {
     'Content-Type':'application/json',
@@ -932,7 +935,6 @@ async def call_prompt_flow(pf_endpoint, pf_key, request_json: dict):
         headers=headers,
         json=request_json
     )
-    logging.debug("call_prompt_flow: ", response)
     return response.json()
 
 @bp.route("/conversation", methods=["POST"])
